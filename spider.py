@@ -7,6 +7,7 @@ import hashlib
 import base64
 from bs4 import BeautifulSoup
 import requests
+import threading
 
 
 def parse(img_hash, constant):
@@ -69,7 +70,7 @@ HEADERS = {
     image/webp,image/apng,*/*;q=0.8',
     'Accept-Encoding': 'gzip, deflate',
     'Accept-Language': 'zh-CN,zh;q=0.9',
-    'Cookie':'nsfw-click-load=off; bad-click-load=on; gif-click-load=on',  # 关闭NSFW
+    'Cookie': 'nsfw-click-load=off; bad-click-load=on; gif-click-load=on',  # 关闭NSFW
     'Cache-Control': 'max-age=0',
     'Host': 'jandan.net',
     'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) \
@@ -87,7 +88,8 @@ def get_soup_list(url='http://jandan.net/ooxx', page_num=3):
         html = requests.get(url, headers=HEADERS).text
         soup = BeautifulSoup(html, 'lxml')
         pages.append(soup)
-        url = 'http:' + soup.select('.previous-comment-page')[0]['href']  # 得到下一页的url
+        url = 'http:' + \
+            soup.select('.previous-comment-page')[0]['href']  # 得到下一页的url
     return pages
 
 
@@ -100,7 +102,8 @@ def get_constant_and_hash(soup):
             r'\/\/cdn.jandan.net\/static\/min.*?')})
         js_file_url = "http://" + j['src'][2:]
         JS_FILE = requests.get(js_file_url, headers=HEADERS).text
-    cons = re.search(r'.*f_\w+\(e,\"(\w+)\".*', JS_FILE)  # 得到原js函数中的一个用于解析的字符串实参
+    cons = re.search(
+        r'.*f_\w+\(e,\"(\w+)\".*', JS_FILE)  # 得到原js函数中的一个用于解析的字符串实参
     constant = cons.group(1)
 
     result_list = []
@@ -111,18 +114,21 @@ def get_constant_and_hash(soup):
 
 def get_highquality_index(soup):
     '''筛选图片 得到评价相对好的图片 参数为beautifulsoup对象'''
-    votes_list = soup.find('ol', {'class':'commentlist'}).find_all('div', {'class':'jandan-vote'})
+    votes_list = soup.find('ol', {'class': 'commentlist'}).find_all(
+        'div', {'class': 'jandan-vote'})
     like_socres = []  # 每张图片的oo数
     unlike_socres = []  # 每张图片的xx数
     index_list = []  # 高质量图片的下标
     for vote in votes_list:
-        like = vote.find('span', {'class':'tucao-like-container'}).find('span').string
+        like = vote.find(
+            'span', {'class': 'tucao-like-container'}).find('span').string
         like_socres.append(int(like))
-        unlike = vote.find('span', {'class':'tucao-unlike-container'}).find('span').string
+        unlike = vote.find(
+            'span', {'class': 'tucao-unlike-container'}).find('span').string
         unlike_socres.append(int(unlike))
     for index in map(like_socres.index, like_socres):
         # 选取oo大于xx三倍 且 xx小于25的图片
-        if (like_socres[index] > unlike_socres[index]*3) and (unlike_socres[index] < 25):
+        if (like_socres[index] > unlike_socres[index] * 3) and (unlike_socres[index] < 25):
             index_list.append(index)
     return index_list
 
@@ -131,7 +137,7 @@ random.seed(datetime.datetime.now())
 def get_random_index(pic_num, pic_num_max):
     '''在一定index范围内获得随机的下标 或 选取全部下标 参数为得到的图片数与页面最大图片数'''
     index_list = []
-    if pic_num < pic_num_max*0.75:  # 防止传入参数超过边界 选取数接近总数时随机效率会很低 故取0.75*max
+    if pic_num < pic_num_max * 0.75:  # 防止传入参数超过边界 选取数接近总数时随机效率会很低 故取0.75*max
         for i in range(pic_num):
             index = int(random.random() * pic_num_max)
             while index in index_list:  # 随机选取的图片已存在时 再次选取
@@ -141,6 +147,14 @@ def get_random_index(pic_num, pic_num_max):
         for i in range(pic_num_max):
             index_list.append(i)
     return index_list
+
+
+thread_lock = threading.BoundedSemaphore(value=10)  # 设置最大线程数
+def download_pic(file_name, url):
+    print('Pic: ', file_name)
+    with open('pics/'+file_name, 'wb') as pic:
+        pic.write(requests.get(url, headers=HEADERS).content)
+    thread_lock.release()  # 释放线程锁
 
 
 def spider(soup, pic_num=3, Mode='Random'):
@@ -163,17 +177,16 @@ def spider(soup, pic_num=3, Mode='Random'):
         url = 'http:' + parse(img_hash, constant)
         replace = re.match(r'(.*\.sinaimg\.cn\/)(\w+)(\/.+\.gif)', url)
         if replace:
-            url = replace.group(1) + 'large' + replace.group(3)  # 获得原图
+            url = replace.group(1) + 'large' + replace.group(3)  # 获得原图url
         ext_match = re.match(r'.*(\.\w+)', url)
         extension_name = ext_match.group(1)  # 获得图片扩展名
         md5 = hashlib.md5()
         md5.update(url.encode("utf8"))  # 用md5后的图片url作为文件名
         file_name = md5.hexdigest() + extension_name
-        print('Pic: ', file_name)
-        with open(file_name, 'wb') as pic:
-            HEADERS['host'] = 'wx3.sinaimg.cn'  # 此处利用了HEADERS 但会使其不能再用于获取html
-            pic.write(requests.get(url, headers=HEADERS).content)
-            pic.close()
+        HEADERS['host'] = 'wx3.sinaimg.cn'  # 此处利用了HEADERS 但会使其不能再用于获取html
+        thread_lock.acquire()  # 获得线程锁
+        thread = threading.Thread(target=download_pic, args=(file_name, url))
+        thread.start()  # 线程开始
 
 
 def main():
@@ -182,7 +195,7 @@ def main():
     soup_list = get_soup_list('http://jandan.net/pic', 5)  # 无聊图
     for soup in soup_list:
         time.sleep(2)
-        spider(soup, pic_num=100, Mode='HighQuality')
+        spider(soup, pic_num=100, Mode='Random')
 
 
 if __name__ == '__main__':

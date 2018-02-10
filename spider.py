@@ -66,13 +66,8 @@ def decode_base64(data):
 
 
 HEADERS = {
-    'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,\
-    image/webp,image/apng,*/*;q=0.8',
-    'Accept-Encoding': 'gzip, deflate',
     'Accept-Language': 'zh-CN,zh;q=0.9',
     'Cookie': 'nsfw-click-load=off; bad-click-load=on; gif-click-load=on',  # 关闭NSFW
-    'Cache-Control': 'max-age=0',
-    'Host': 'jandan.net',
     'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) \
     AppleWebKit/537.36 (KHTML, like Gecko) Chrome/64.0.3282.99 Safari/537.36'
 }

@@ -201,6 +201,10 @@ class UrlMannager:
         with open('url.txt','a') as f:
             f.write(oldUrl+'\n')
 
+    def database_writer(self):
+        pass
+
+
 if __name__=='__main__':
 
     firstPage=requests.get('http://jandan.net/ooxx',headers=headers).text

@@ -94,11 +94,12 @@ def get_constant_and_hash(soup):
     global JS_FILE  # 全局变量应避免使用 以后改掉
     if JS_FILE is None:  # js文件只获取一次 多次会跳转页面
         j = soup.find('script', {'src': re.compile(
-            r'\/\/cdn.jandan.net\/static\/min.*?')})
+            r'\/\/cdn.jandan.net\/static\/min.*?\.js')})
         js_file_url = "http://" + j['src'][2:]
+        print('js_file_url='+ js_file_url)
         JS_FILE = requests.get(js_file_url, headers=HEADERS).text
     cons = re.search(
-        r'.*f_\w+\(e,\"(\w+)\".*', JS_FILE)  # 得到原js函数中的一个用于解析的字符串实参
+        r'var\sc=.\w+\(e,\"(\w+)\"\)', JS_FILE)  # 得到原js函数中的一个用于解析的字符串实参
     constant = cons.group(1)
 
     result_list = []
@@ -186,8 +187,8 @@ def spider(soup, pic_num=3, Mode='Random'):
 
 def main():
     '''main'''
-    # soup_list = get_soup_list(page_num=5)  # 妹子图
-    soup_list = get_soup_list('http://jandan.net/pic', 5)  # 无聊图
+    soup_list = get_soup_list(page_num=2)  # 妹子图
+    # soup_list = get_soup_list('http://jandan.net/pic', 5)  # 无聊图
     for soup in soup_list:
         time.sleep(2)
         spider(soup, pic_num=100, Mode='Random')
